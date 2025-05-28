@@ -1,5 +1,5 @@
 {
-  "name": "shweandmya/chatify",
+  "name": "thangthangtechnology/chatify",
   "description": "A package for Laravel PHP Framework to add a complete real-time chat system.",
   "type": "library",
   "keywords": [
@@ -16,8 +16,8 @@
   "license": "MIT",
   "authors": [
     {
-      "name": "Si Thu Aung",
-      "email": "sithu237010@gmail.com"
+      "name": "thangthangtechnology",
+      "email": "nainglintun.ceo.thangthangtechnology@gmail.com"
     }
   ],
   "homepage": "https://github.com/sithuaung67/shweandmya-sea-standard-chat",
