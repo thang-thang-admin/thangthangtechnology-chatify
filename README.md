@@ -45,7 +45,7 @@ The official documentation can be found [here](https://chatify.munafio.com)
 ## Author
 
 - [Munaf A. Mahdi](https://www.munafio.com) (Original Project Owner)
-- [Thant Htet Aung](https://thant-htet-aung-portfolio.netlify.app) (Current Forked Project Owner)
+- [Thang Thang Technology](http://thangthangtechnology.com) (Current Forked Project Owner)
 
 ## License
 
