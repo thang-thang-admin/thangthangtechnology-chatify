@@ -25,7 +25,8 @@
   "prefer-stable": true,
   "require": {
     "pusher/pusher-php-server": "^6.0|^7.0|^7.1",
-    "google/auth": "^1.47"
+    "google/auth": "^1.47",
+    "google/apiclient": "2.13"
   },
   "autoload": {
     "psr-4": {
