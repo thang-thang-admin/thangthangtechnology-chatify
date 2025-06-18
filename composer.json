@@ -24,7 +24,8 @@
   "minimum-stability": "dev",
   "prefer-stable": true,
   "require": {
-    "pusher/pusher-php-server": "^6.0|^7.0|^7.1"
+    "pusher/pusher-php-server": "^6.0|^7.0|^7.1",
+    "google/auth": "^1.47"
   },
   "autoload": {
     "psr-4": {
