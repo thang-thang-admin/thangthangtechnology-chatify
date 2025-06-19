@@ -174,9 +174,9 @@ class MessagesController extends Controller
      */
     public function fetch(Request $request)
     {
-        // $query = Chatify::fetchMessagesQuery($request['id'], $request['auth_id'])->latest();
         $query = Chatify::fetchMessagesQuery($request['id'])->latest();
         $messages = $query->paginate($request->per_page ?? $this->perPage);
+
         $decodedMessages = $messages->map(function ($message) {
             if ($message->attachment) {
                 $message->attachment = json_decode($message->attachment, true)['new_name'];
@@ -194,16 +194,24 @@ class MessagesController extends Controller
             }
             return $message;
         });
+
+        // Safe check for last message and last message ID
+        $lastMessage = collect($messages->items())->last();
+        $lastMessageId = $lastMessage ? $lastMessage->id : null;
+
         $totalMessages = $messages->total();
         $lastPage = $messages->lastPage();
+
         $response = [
             'total' => $totalMessages,
             'last_page' => $lastPage,
-            'last_message_id' => collect($messages->items())->last()->id ?? null,
+            'last_message_id' => $lastMessageId,
             'messages' => $decodedMessages,
         ];
+
         return Response::json($response);
     }
+
 
     /**
      * Make messages as seen
