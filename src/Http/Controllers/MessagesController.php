@@ -491,6 +491,74 @@ class MessagesController extends Controller
         ], 200);
     }
 
+    // public function sendPushNotification($title, $message, $customerId = null, $imgUrl = null)
+    // {
+    //     $credentialsFilePath = $_SERVER['DOCUMENT_ROOT'] . '/assets/firebase/fcm-server-key.json';
+    //     $client = new Google_Client();
+    //     $client->setAuthConfig($credentialsFilePath);
+    //     $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+    //     $client->refreshTokenWithAssertion();
+    //     $token = $client->getAccessToken();
+    //     $access_token = $token['access_token'];
+    //     $project_id = env('APP_FCM_PROJECT_ID');
+
+    //     $url = "https://fcm.googleapis.com/v1/projects/".$project_id."/messages:send";        
+    //     // Fetch user's FCM tokens
+    //     // $fcmTokens = FcmTokenKey::where('customer_id', $customerId)
+    //     // ->orderBy('id', 'desc')
+    //     // ->pluck('fcm_token_key');
+
+    //     $customer = Customer::where('id', $customerId)->first();
+
+    //     $notifications = [
+    //         'title' => $title,
+    //         'body' => $message,
+    //     ];
+
+    //     $dataPayload = [
+    //         'message_id' => "1"
+    //     ];
+
+    //     if ($imgUrl) {
+    //         $notifications['image'] = $imgUrl;
+    //     }
+
+    //     if ($customer) {
+    //         // foreach ($fcmTokens as $fcmKey) {
+    //             $data = [
+    //                 'token' => $customer->fcm_token_key,
+    //                 'notification' => $notifications,
+    //                 'data'         => $dataPayload,
+    //                 'apns' => [
+    //                     'headers' => [
+    //                         'apns-priority' => '10',
+    //                     ],
+    //                     'payload' => [
+    //                         'aps' => [
+    //                             'sound' => 'default',
+    //                         ]
+    //                     ],
+    //                 ],
+    //                 'android' => [
+    //                     'priority' => 'high',
+    //                     'notification' => [
+    //                         'sound' => 'default',
+    //                     ]
+    //                 ],
+    //             ];
+
+    //             $response = Http::withHeaders([
+    //                 'Authorization' => "Bearer $access_token",
+    //                 'Content-Type' => "application/json"
+    //             ])->post($url, [
+    //                 'message' => $data
+    //             ]);
+
+    //             return true;
+    //         }
+    //     // }
+    // }
+
     public function sendPushNotification($title, $message, $customerId = null, $imgUrl = null)
     {
         $credentialsFilePath = $_SERVER['DOCUMENT_ROOT'] . '/assets/firebase/fcm-server-key.json';
@@ -503,59 +571,58 @@ class MessagesController extends Controller
         $project_id = env('APP_FCM_PROJECT_ID');
 
         $url = "https://fcm.googleapis.com/v1/projects/".$project_id."/messages:send";        
-        // Fetch user's FCM tokens
-        // $fcmTokens = FcmTokenKey::where('customer_id', $customerId)
-        // ->orderBy('id', 'desc')
-        // ->pluck('fcm_token_key');
 
-        $customer = Customer::where('id', $customerId)->first();
+        $customer = Customer::with('fcmTokens')->find($customerId);
+
+        if (!$customer || $customer->fcmTokens->isEmpty()) {
+            return false;
+        }
 
         $notifications = [
             'title' => $title,
             'body' => $message,
         ];
 
-        $dataPayload = [
-            'message_id' => "1"
-        ];
-
         if ($imgUrl) {
             $notifications['image'] = $imgUrl;
         }
 
-        if ($customer) {
-            // foreach ($fcmTokens as $fcmKey) {
-                $data = [
-                    'token' => $customer->fcm_token_key,
-                    'notification' => $notifications,
-                    'data'         => $dataPayload,
-                    'apns' => [
-                        'headers' => [
-                            'apns-priority' => '10',
-                        ],
-                        'payload' => [
-                            'aps' => [
-                                'sound' => 'default',
-                            ]
-                        ],
+        $dataPayload = [
+            'message_id' => "1"
+        ];
+
+        foreach ($customer->fcmTokens as $token) {
+            $data = [
+                'token' => $token->fcm_token_key,
+                'notification' => $notifications,
+                'data' => $dataPayload,
+                'apns' => [
+                    'headers' => [
+                        'apns-priority' => '10',
                     ],
-                    'android' => [
-                        'priority' => 'high',
-                        'notification' => [
+                    'payload' => [
+                        'aps' => [
                             'sound' => 'default',
                         ]
                     ],
-                ];
+                ],
+                'android' => [
+                    'priority' => 'high',
+                    'notification' => [
+                        'sound' => 'default',
+                    ]
+                ],
+            ];
 
-                $response = Http::withHeaders([
-                    'Authorization' => "Bearer $access_token",
-                    'Content-Type' => "application/json"
-                ])->post($url, [
-                    'message' => $data
-                ]);
+            $response = Http::withHeaders([
+                'Authorization' => "Bearer $access_token",
+                'Content-Type' => "application/json"
+            ])->post($url, [
+                'message' => $data
+            ]);
+        }
 
-                return true;
-            }
-        // }
+        return true;
     }
+
 }
