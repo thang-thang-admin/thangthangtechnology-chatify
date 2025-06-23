@@ -154,7 +154,7 @@ class MessagesController extends Controller
             Chatify::push("private-chatify." . $request['id'], 'messaging', [
                 'from_id' => Auth::guard('sanctum')->user()->id,
                 'to_id' => $request['id'],
-                'message' => $messageData,
+                'message' => Chatify::messageCard($messageData, true)
             ]);
 
             $this->sendPushNotification("New Message!", $request['message'], $request['id']);
