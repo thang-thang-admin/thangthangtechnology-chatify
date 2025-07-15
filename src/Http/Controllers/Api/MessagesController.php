@@ -128,6 +128,7 @@ class MessagesController extends Controller
             //     $error->status = 1;
             //     $error->message = "File size you are trying to upload is too large!";
             // }
+            $extension = strtolower($file->extension());
 
             if (in_array($extension, $allowed)) {
                 // get attachment name
