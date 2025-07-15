@@ -105,78 +105,30 @@ class MessagesController extends Controller
         $attachment_title = null;
 
         //if there is attachment [file]
-        // if ($request->hasFile('file')) {
-        //     // allowed extensions
-        //     $allowed_images = Chatify::getAllowedImages();
-        //     $allowed_files  = Chatify::getAllowedFiles();
-        //     $allowed        = array_merge($allowed_images, $allowed_files);
-
-        //     $file = $request->file('file');
-        //     // check file size
-        //     if ($file->getSize() < Chatify::getMaxUploadSize()) {
-        //         if (in_array(strtolower($file->extension()), $allowed)) {
-        //             // get attachment name
-        //             $attachment_title = $file->getClientOriginalName();
-        //             // upload attachment and store the new name
-        //             $attachment = Str::uuid() . "." . $file->extension();
-        //             $file->storeAs(config('chatify.attachments.folder'), $attachment, config('chatify.storage_disk_name'));
-        //         } else {
-        //             $error->status = 1;
-        //             $error->message = "File extension not allowed!";
-        //         }
-        //     } else {
-        //         $error->status = 1;
-        //         $error->message = "File size you are trying to upload is too large!";
-        //     }
-        // }
-
         if ($request->hasFile('file')) {
-            // Allowed extensions
-            $allowed_images = Chatify::getAllowedImages(); // e.g., ['jpg', 'jpeg', 'png']
-            $allowed_files  = Chatify::getAllowedFiles();  // e.g., ['pdf', 'docx']
+            // allowed extensions
+            $allowed_images = Chatify::getAllowedImages();
+            $allowed_files  = Chatify::getAllowedFiles();
             $allowed        = array_merge($allowed_images, $allowed_files);
 
             $file = $request->file('file');
-
-            // Check file size
+            // check file size
             if ($file->getSize() < Chatify::getMaxUploadSize()) {
-                $extension = strtolower($file->extension());
-
-                if (in_array($extension, $allowed)) {
-                    // Generate new name
+                if (in_array(strtolower($file->extension()), $allowed)) {
+                    // get attachment name
                     $attachment_title = $file->getClientOriginalName();
-                    $attachment       = Str::uuid() . '.' . $extension;
-
-                    // Upload to S3
-                    $path = $file->storeAs(
-                        config('chatify.attachments.folder'), // e.g., 'attachments'
-                        $attachment,
-                        config('chatify.storage_disk_name')   // should be 's3'
-                    );
-
-                    // Get public URL
-                    $fileUrl = Storage::disk(config('chatify.storage_disk_name'))->url($path);
-
-                    return response()->json([
-                        'status' => true,
-                        'message' => 'Uploaded successfully!',
-                        'url' => $fileUrl,
-                        'name' => $attachment_title,
-                    ]);
+                    // upload attachment and store the new name
+                    $attachment = Str::uuid() . "." . $file->extension();
+                    $file->storeAs(config('chatify.attachments.folder'), $attachment, config('chatify.storage_disk_name'));
                 } else {
-                    return response()->json([
-                        'status' => false,
-                        'message' => 'File extension not allowed!',
-                    ], 422);
+                    $error->status = 1;
+                    $error->message = "File extension not allowed!";
                 }
             } else {
-                return response()->json([
-                    'status' => false,
-                    'message' => 'File size too large!',
-                ], 422);
+                $error->status = 1;
+                $error->message = "File size you are trying to upload is too large!";
             }
         }
-
 
         // if ($request->hasFile('file')) {
 
