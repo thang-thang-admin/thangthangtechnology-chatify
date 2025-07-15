@@ -138,7 +138,7 @@ class MessagesController extends Controller
 
                 // upload file to S3 disk
                 $filePath = $file->storeAs(
-                    config('chatify.attachments.folder'),  // e.g. 'attachments'
+                    'profile_files',  // e.g. 'attachments'
                     $uniqueName,
                     config('chatify.storage_disk_name')    // e.g. 's3'
                 );

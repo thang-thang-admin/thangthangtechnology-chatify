@@ -143,10 +143,10 @@ class MessagesController extends Controller
 
                     // create a unique file name
                     $uniqueName = Str::uuid() . '.' . $extension;
-
+                    
                     // upload to s3
                     $filePath = $file->storeAs(
-                        config('chatify.attachments.folder'), // e.g., 'attachments'
+                        'profile_files', // e.g., 'attachments'
                         $uniqueName,
                         config('chatify.storage_disk_name')    // e.g., 's3'
                     );
