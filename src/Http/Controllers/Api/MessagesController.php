@@ -325,18 +325,36 @@ class MessagesController extends Controller
      * @param Request $request
      * @return \Illuminate\Http\JsonResponse
      */
+    // public function sharedPhotos(Request $request)
+    // {
+    //     $images = Chatify::getSharedPhotos($request['user_id']);
+
+    //     foreach ($images as $key=>$image) {
+    //         $images[$key] = asset('image/public/'.config('chatify.attachments.folder') . '/' . $image);
+    //     }
+    //     // send the response
+    //     return Response::json([
+    //         'shared' => $images ?? [],
+    //     ], 200);
+    // }
+
     public function sharedPhotos(Request $request)
     {
         $images = Chatify::getSharedPhotos($request['user_id']);
 
-        foreach ($images as $key=>$image) {
-            $images[$key] = asset('image/public/'.config('chatify.attachments.folder') . '/' . $image);
+        foreach ($images as $key => $image) {
+            // Build the S3 path for each file
+            $filePath = config('chatify.attachments.folder') . '/' . $image;
+
+            // Generate full URL from S3
+            $images[$key] = Storage::disk('s3')->url($filePath);
         }
-        // send the response
+
         return Response::json([
             'shared' => $images ?? [],
         ], 200);
     }
+
 
     /**
      * Delete conversation
