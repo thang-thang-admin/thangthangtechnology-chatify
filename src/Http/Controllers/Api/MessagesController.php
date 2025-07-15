@@ -104,31 +104,81 @@ class MessagesController extends Controller
         $attachment = null;
         $attachment_title = null;
 
-        // if there is attachment [file]
+        //if there is attachment [file]
+        // if ($request->hasFile('file')) {
+        //     // allowed extensions
+        //     $allowed_images = Chatify::getAllowedImages();
+        //     $allowed_files  = Chatify::getAllowedFiles();
+        //     $allowed        = array_merge($allowed_images, $allowed_files);
+
+        //     $file = $request->file('file');
+        //     // check file size
+        //     if ($file->getSize() < Chatify::getMaxUploadSize()) {
+        //         if (in_array(strtolower($file->extension()), $allowed)) {
+        //             // get attachment name
+        //             $attachment_title = $file->getClientOriginalName();
+        //             // upload attachment and store the new name
+        //             $attachment = Str::uuid() . "." . $file->extension();
+        //             $file->storeAs(config('chatify.attachments.folder'), $attachment, config('chatify.storage_disk_name'));
+        //         } else {
+        //             $error->status = 1;
+        //             $error->message = "File extension not allowed!";
+        //         }
+        //     } else {
+        //         $error->status = 1;
+        //         $error->message = "File size you are trying to upload is too large!";
+        //     }
+        // }
+
         if ($request->hasFile('file')) {
-            // allowed extensions
-            $allowed_images = Chatify::getAllowedImages();
-            $allowed_files  = Chatify::getAllowedFiles();
+
+            // Allowed extensions
+            $allowed_images = Chatify::getAllowedImages(); // e.g. ['jpg', 'jpeg', 'png']
+            $allowed_files  = Chatify::getAllowedFiles();  // e.g. ['pdf', 'docx']
             $allowed        = array_merge($allowed_images, $allowed_files);
 
             $file = $request->file('file');
-            // check file size
+
+            // Check file size
             if ($file->getSize() < Chatify::getMaxUploadSize()) {
-                if (in_array(strtolower($file->extension()), $allowed)) {
-                    // get attachment name
+
+                $extension = strtolower($file->extension());
+
+                if (in_array($extension, $allowed)) {
+                    // Original file name
                     $attachment_title = $file->getClientOriginalName();
-                    // upload attachment and store the new name
-                    $attachment = Str::uuid() . "." . $file->extension();
-                    $file->storeAs(config('chatify.attachments.folder'), $attachment, config('chatify.storage_disk_name'));
+
+                    // Generate unique name
+                    $attachment = Str::uuid() . "." . $extension;
+
+                    // Upload to S3 (or your defined disk)
+                    $storagePath = $file->storeAs(
+                        config('chatify.attachments.folder'),
+                        $attachment,
+                        config('chatify.storage_disk_name') // Should be 's3'
+                    );
+
+                    // Get public URL from S3
+                    $fileUrl = Storage::disk(config('chatify.storage_disk_name'))->url($storagePath);
+
+                    // Optionally return or store $fileUrl somewhere
                 } else {
-                    $error->status = 1;
-                    $error->message = "File extension not allowed!";
+                    $error = (object)[
+                        'status' => 1,
+                        'message' => "File extension not allowed!",
+                    ];
                 }
+
             } else {
-                $error->status = 1;
-                $error->message = "File size you are trying to upload is too large!";
+                $error = (object)[
+                    'status' => 1,
+                    'message' => "File size you are trying to upload is too large!",
+                ];
             }
         }
+
+
+
 
         if (!$error->status) {
             // send to database
