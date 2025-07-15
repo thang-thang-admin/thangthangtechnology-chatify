@@ -125,12 +125,34 @@ class MessagesController extends Controller
             }
             // check file size
             if ($file->getSize() < Chatify::getMaxUploadSize()) {
-                if (in_array(strtolower($file->extension()), $allowed)) {
-                    // get attachment name
+                // if (in_array(strtolower($file->extension()), $allowed)) {
+                //     // get attachment name
+                //     $attachment_title = $file->getClientOriginalName();
+                //     // upload attachment and store the new name
+                //     $attachment = Str::uuid() . "." . $file->extension();
+                //     $file->storeAs(config('chatify.attachments.folder'), $attachment, config('chatify.storage_disk_name'));
+                // } else {
+                //     $error->status = 1;
+                //     $error->message = "File extension not allowed!";
+                // }
+                $extension = strtolower($file->extension());
+
+                if (in_array($extension, $allowed)) {
+                    // get original file name
                     $attachment_title = $file->getClientOriginalName();
-                    // upload attachment and store the new name
-                    $attachment = Str::uuid() . "." . $file->extension();
-                    $file->storeAs(config('chatify.attachments.folder'), $attachment, config('chatify.storage_disk_name'));
+
+                    // create a unique file name
+                    $uniqueName = Str::uuid() . '.' . $extension;
+
+                    // upload to s3
+                    $filePath = $file->storeAs(
+                        config('chatify.attachments.folder'), // e.g., 'attachments'
+                        $uniqueName,
+                        config('chatify.storage_disk_name')    // e.g., 's3'
+                    );
+
+                    // get the full URL to store in database
+                    $attachment = Storage::disk(config('chatify.storage_disk_name'))->url($filePath);
                 } else {
                     $error->status = 1;
                     $error->message = "File extension not allowed!";
@@ -140,57 +162,6 @@ class MessagesController extends Controller
                 $error->message = "File size you are trying to upload is too large!";
             }
         }
-
-        // if ($request->hasFile('file') || $request->hasFile('audio_data')) {
-        //     // Allowed extensions
-        //     $allowed_images = Chatify::getAllowedImages(); // e.g. ['jpg', 'jpeg', 'png']
-        //     $allowed_files  = Chatify::getAllowedFiles();  // e.g. ['mp3', 'pdf']
-        //     $allowed        = array_merge($allowed_images, $allowed_files);
-
-        //     // Choose file input based on type
-        //     $file = $request->type === 'audio' ? $request->file('audio_data') : $request->file('file');
-
-        //     // Check file size
-        //     if ($file->getSize() < Chatify::getMaxUploadSize()) {
-        //         $extension = strtolower($file->extension());
-
-        //         if (in_array($extension, $allowed)) {
-        //             // Original file name and unique name
-        //             $attachment_title = $file->getClientOriginalName();
-        //             $attachment       = Str::uuid() . '.' . $extension;
-
-        //             // Store in S3
-        //             $storagePath = $file->storeAs(
-        //                 config('chatify.attachments.folder'),   // e.g. 'attachments'
-        //                 $attachment,
-        //                 config('chatify.storage_disk_name')     // must be 's3'
-        //             );
-
-        //             // Get public URL
-        //             $fileUrl = Storage::disk(config('chatify.storage_disk_name'))->url($storagePath);
-
-        //             // Optional: return or store in DB
-        //             return response()->json([
-        //                 'status' => true,
-        //                 'message' => 'File uploaded successfully!',
-        //                 'url' => $fileUrl,
-        //                 'name' => $attachment_title,
-        //                 'type' => $request->type,
-        //             ]);
-        //         } else {
-        //             return response()->json([
-        //                 'status' => false,
-        //                 'message' => 'File extension not allowed!',
-        //             ], 422);
-        //         }
-        //     } else {
-        //         return response()->json([
-        //             'status' => false,
-        //             'message' => 'File size too large!',
-        //         ], 422);
-        //     }
-        // }
-
 
         if (!$error->status) {
             $message = Chatify::newMessage([
