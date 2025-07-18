@@ -303,7 +303,7 @@ class ChatifyMessenger
             $imageset = config('chatify.gravatar.imageset');
             $user->image = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($user->email))) . '?s=' . $imageSize . '&d=' . $imageset;
         } else {
-            $user->image = self::getUserAvatarUrl($user->image);
+            $user->image = self::getUserAvatarUrl($user->profile);
         }
         return $user;
     }
@@ -435,6 +435,10 @@ class ChatifyMessenger
      */
     public function getUserAvatarUrl($user_avatar_name)
     {
+        if (!empty($user_avatar_name)) {
+            // If no avatar, return default avatar
+            return $user_avatar_name;
+        }
         return asset('assets/images/avatar/person.png');
         // return asset('image/public/'.config('chatify.user_avatar.folder') . '/' . $user_avatar_name);
     }
