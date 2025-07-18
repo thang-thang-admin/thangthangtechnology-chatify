@@ -435,7 +435,8 @@ class ChatifyMessenger
      */
     public function getUserAvatarUrl($user_avatar_name)
     {
-        return asset('image/public/'.config('chatify.user_avatar.folder') . '/' . $user_avatar_name);
+        return asset('assets/images/avatar/person.png');
+        // return asset('image/public/'.config('chatify.user_avatar.folder') . '/' . $user_avatar_name);
     }
 
     /**

@@ -204,7 +204,7 @@ class MessagesController extends Controller
             if ($message->attachment) {
                 $message->attachment = json_decode($message->attachment, true)['new_name'];
                 $fileExtension = strtolower(pathinfo($message->attachment, PATHINFO_EXTENSION));
-                if (in_array($fileExtension, ['wav', 'mp3'])) {
+                if (in_array(strtolower($fileExtension), ['wav', 'mp3','m4a', 'ogg', 'flac','aac','opus','wma','aiff'])) {
                     $attachment_type = 'audio';
                 } elseif (in_array($fileExtension, ['jpg', 'jpeg', 'png', 'gif'])) {
                     $attachment_type = 'image';
