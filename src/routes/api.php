@@ -1,10 +1,17 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
+use App\Http\Controllers\Api\MessageApiController;
+
+// MessageApiController routes (modern class-based)
+Route::post('/messages/send', [MessageApiController::class, 'sendMessage']);
+Route::get('/messages/{toId}', [MessageApiController::class, 'getMessages']);
+Route::get('/contacts', [MessageApiController::class, 'getContacts']);
 
 /**
  * Authentication for pusher private channels
  */
+// MessagesController routes (legacy string-based)
 Route::post('/chat/auth', 'MessagesController@pusherAuth')->name('api.pusher.auth');
 
 /**
