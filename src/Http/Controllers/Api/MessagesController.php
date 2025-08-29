@@ -248,13 +248,12 @@ class MessagesController extends Controller
 
         // Save message
         $message = new ChMessage();
-        $message->type = 'customer';
+        $message->type = 'user';
         $message->from_id = $user->id;
         $message->to_id = $request->to_id;
         $message->body = htmlentities(trim($request->message), ENT_QUOTES, 'UTF-8');
-        $message->sent_by = 'customer';
+        $message->sent_by = 'user';
         $message->attachment = $attachment; // Just the link
-        // $message->attachment_type = $attachment_type; // Save separately
         $message->save();
 
         $customer = User::findOrFail($request->to_id);
@@ -262,34 +261,21 @@ class MessagesController extends Controller
 
         $title = 'Send Chat Noti';
         $body = $request->message;
-        $type = 'customer';
+        $type = 'user';
         // Send to all FCM tokens
         foreach ($customer->fcmTokens ?? [] as $token) {
-            if ($customer->is_allow_noti !== 'no') {                       
+            if ($customer->is_allow_noti != 'no') {                       
                 $firebaseService->sendNotification($title, $body, $token->fcm_token_key);
             }        
         }
-
-        // send to database
-        $message = Chatify::newMessage([
-            'type' => $type,
-            'from_id' => Auth::guard('sanctum')->user()->id,
-            'to_id' => (string) $message->to_id,
-            'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
-            'sent_by' => 'user',
-            'attachment' => ($attachment) ? json_encode((object)[
-                'new_name' => $attachment,
-                'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
-            ]) : null,
-        ]);
 
         // fetch message to send it with the response
         $messageData = Chatify::parseMessage($message);
 
         // send to user using pusher
         Chatify::push("private-chatify." . $request['id'], 'messaging', [
-            'from_id' => Auth::guard('sanctum')->user()->id,
-            'to_id' => $request['to_id'],
+            'from_id' => $user->id,
+            'to_id' => $request->to_id,
             'message' => Chatify::messageCard($messageData, true)
         ]);
                 
