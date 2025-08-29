@@ -289,7 +289,7 @@ class MessagesController extends Controller
         // send to user using pusher
         Chatify::push("private-chatify." . $request['id'], 'messaging', [
             'from_id' => Auth::guard('sanctum')->user()->id,
-            'to_id' => $request['id'],
+            'to_id' => $request['to_id'],
             'message' => Chatify::messageCard($messageData, true)
         ]);
                 
