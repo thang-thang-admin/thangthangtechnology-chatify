@@ -194,8 +194,87 @@ class MessagesController extends Controller
         ]);
     }
 
-    //user to user start
     public function sendMessage(Request $request)
+    {
+        // default variables
+        $error = (object)[
+            'status' => 0,
+            'message' => null
+        ];
+        $attachment = null;
+        $attachment_title = null;
+
+        //if there is attachment [file]
+        if ($request->hasFile('file')) {
+            // allowed extensions
+            $allowed_images = Chatify::getAllowedImages();
+            $allowed_files  = Chatify::getAllowedFiles();
+            $allowed        = array_merge($allowed_images, $allowed_files);
+
+            $file = $request->file('file');
+            $extension = strtolower($file->extension());
+
+            if (in_array($extension, $allowed)) {
+                // get attachment name
+                $attachment_title = $file->getClientOriginalName();
+
+                // generate unique file name
+                $uniqueName = Str::uuid() . "." . $extension;
+
+                // upload file to S3 disk
+                $filePath = $file->storeAs(
+                    'profile_files',  // e.g. 'attachments'
+                    $uniqueName,
+                    config('chatify.storage_disk_name')    // e.g. 's3'
+                );
+
+                // get full URL for the stored file on S3
+                $attachment = Storage::disk(config('chatify.storage_disk_name'))->url($filePath);
+
+            } else {
+                $error->status = 1;
+                $error->message = "File extension not allowed!";
+            }
+        }
+
+        if (!$error->status) {
+            // send to database
+            $message = Chatify::newMessage([
+                'type' => $request['type'],
+                'from_id' => Auth::guard('sanctum')->user()->id,
+                'to_id' => $request['to_id'],
+                'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
+                'sent_by' => 'user',
+                'attachment' => ($attachment) ? json_encode((object)[
+                    'new_name' => $attachment,
+                    'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
+                ]) : null,
+            ]);
+
+            // fetch message to send it with the response
+            $messageData = Chatify::parseMessage($message);
+
+            // send to user using pusher
+            // if (Auth::guard('sanctum')->user()->id != $request['id']) {
+            Chatify::push("private-chatify." . $request['to_id'], 'messaging', [
+                'from_id' => Auth::guard('sanctum')->user()->id,
+                'to_id' => $request['to_id'],
+                'message' => Chatify::messageCard($messageData, true)
+            ]);
+            // }
+        }
+
+        // send the response
+        return Response::json([
+            'status' => '200',
+            'error' => $error,
+            'message' => $messageData ?? [],
+            'tempID' => $request['temporaryMsgId'],
+        ]);
+    }
+
+    //user to user start
+    public function sendMessage1(Request $request)
     {
         $request->validate([
             'to_id' => 'required|exists:customers,id',
@@ -273,7 +352,7 @@ class MessagesController extends Controller
         $messageData = Chatify::parseMessage($message);
 
         // send to user using pusher
-        Chatify::push("private-chatify." . $request['id'], 'messaging', [
+        Chatify::push("private-chatify." . $request['to_id'], 'messaging', [
             'from_id' => $user->id,
             'to_id' => $request->to_id,
             'message' => Chatify::messageCard($messageData, true)
