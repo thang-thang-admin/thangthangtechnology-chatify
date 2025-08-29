@@ -1,12 +1,10 @@
 <?php
 
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Api\MessageApiController;
 
-// MessageApiController routes (modern class-based)
-Route::post('/messages/send', [MessageApiController::class, 'sendMessage']);
-Route::get('/messages/{toId}', [MessageApiController::class, 'getMessages']);
-Route::get('/contacts', [MessageApiController::class, 'getContacts']);
+// user to user
+Route::post('/messages/send', 'MessagesController@sendMessage');
+Route::get('/messages/{toId}', 'MessagesController@getMessages');
 
 /**
  * Authentication for pusher private channels
