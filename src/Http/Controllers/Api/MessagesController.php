@@ -7,12 +7,17 @@ use App\Models\Customer as User;
 use Illuminate\Http\Request;
 use App\Models\ChMessage as Message;
 use App\Models\ChFavorite as Favorite;
+use App\Models\ChMessage;
+use App\Models\CustomerBlock;
+use App\Services\Notification\FirebaseService;
+use Carbon\Carbon;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Response;
 use Chatify\Facades\ChatifyMessenger as Chatify;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 
 
 class MessagesController extends Controller
@@ -188,6 +193,223 @@ class MessagesController extends Controller
             'tempID' => $request['temporaryMsgId'],
         ]);
     }
+
+    //user to user start
+    public function sendMessage(Request $request)
+    {
+        $request->validate([
+            'to_id' => 'required|exists:customers,id',
+        ]);
+
+        $user = Auth::guard('sanctum')->user();
+
+        $attachment = null;
+        $attachment_title = null;
+        $attachment_type = null;
+
+        if ($request->hasFile('file')) {
+            $allowed_images = Chatify::getAllowedImages();
+            $allowed_files  = Chatify::getAllowedFiles();
+            $allowed        = array_merge($allowed_images, $allowed_files);
+
+            $file = $request->file('file');
+            $extension = strtolower($file->extension());
+
+            if (!in_array($extension, $allowed)) {
+                return response()->json([
+                    'status' => '422',
+                    'error' => [
+                        'status' => 1,
+                        'message' => 'File type not allowed. Only images and audio are supported.',
+                    ]
+                ], 422);
+            }
+
+            // Determine attachment type
+            if (in_array($extension, ['mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac', 'opus', 'wma', 'aiff'])) {
+                $attachment_type = 'audio';
+            } elseif (in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
+                $attachment_type = 'image';
+            } else {
+                $attachment_type = 'file';
+            }
+
+            $attachment_title = $file->getClientOriginalName();
+            $uniqueName = Str::uuid() . "." . $extension;
+
+            $filePath = $file->storeAs(
+                'chat_attachments',
+                $uniqueName,
+                config('chatify.storage_disk_name')
+            );
+
+            $attachment = Storage::disk(config('chatify.storage_disk_name'))->url($filePath);
+        }
+
+        // Save message
+        $message = new ChMessage();
+        $message->type = 'customer';
+        $message->from_id = $user->id;
+        $message->to_id = $request->to_id;
+        $message->body = htmlentities(trim($request->message), ENT_QUOTES, 'UTF-8');
+        $message->sent_by = 'customer';
+        $message->attachment = $attachment; // Just the link
+        // $message->attachment_type = $attachment_type; // Save separately
+        $message->save();
+
+        $customer = User::findOrFail($request->to_id);
+        $firebaseService = new FirebaseService();
+
+        $title = 'Send Chat Noti';
+        $body = $request->message;
+        $type = 'customer';
+        // Send to all FCM tokens
+        foreach ($customer->fcmTokens ?? [] as $token) {
+            if ($customer->is_allow_noti !== 'no') {                       
+                $firebaseService->sendNotification($title, $body, $token->fcm_token_key);
+            }        
+        }
+                
+        return response()->json([
+            'status' => '200',
+            'error' => [
+                'status' => 0,
+                'message' => null,
+            ],
+            'message' => [
+                'id' => $message->id,
+                'from_id' => $message->from_id,
+                'to_id' => (string) $message->to_id,
+                'message' => $message->body,
+                'attachment' => $attachment ? [
+                    'file' => $attachment,
+                    'title' => $attachment_title,
+                    'type' => $attachment_type,
+                ] : [
+                    'file' => null,
+                    'title' => null,
+                    'type' => null,
+                ],
+                'timeAgo' => Carbon::parse($message->created_at)->diffForHumans(),
+                'created_at' => $message->created_at->toIso8601String(),
+                'sent_by' => $message->sent_by,
+                'seen' => $message->seen ?? null,
+            ],
+            'tempID' => 'temp_' . Str::random(5),
+        ]);
+    }
+
+    private function getAttachmentLink($attachment)
+    {
+        if (!$attachment) {
+            return [null, null];
+        }
+
+        // If attachment is a JSON string with 'file' and 'type'
+        if (Str::startsWith($attachment, '{')) {
+            $data = json_decode($attachment, true);
+
+            return [
+                $data['file'] ?? null,                  // attachment URL
+                $data['type'] ?? $data['attachment_type'] ?? null,  // type like image/audio
+            ];
+        }
+
+        // If it's already a direct link (string), try to guess type from extension
+        $extension = strtolower(pathinfo($attachment, PATHINFO_EXTENSION));
+        $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+        $audioExtensions = ['mp3', 'wav', 'ogg'];
+
+        if (in_array($extension, $imageExtensions)) {
+            $type = 'image';
+        } elseif (in_array($extension, $audioExtensions)) {
+            $type = 'audio';
+        } else {
+            $type = null;
+        }
+
+        return [$attachment, $type];
+    }
+
+    public function getMessages($toId)
+    {
+        if (!Auth::guard('sanctum')->check()) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Unauthorized',
+                'data' => null,
+            ], 401);
+        }
+
+        try {
+            // Ensure recipient exists
+            User::findOrFail($toId);
+        } catch (ModelNotFoundException $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Recipient not found',
+                'data' => null,
+            ], 200);
+        }
+
+        $userId = Auth::guard('sanctum')->user()->id;
+
+        // Fetch messages
+        $messages = ChMessage::where(function ($q) use ($userId, $toId) {
+                $q->where('from_id', $userId)->where('to_id', $toId);
+            })
+            ->orWhere(function ($q) use ($userId, $toId) {
+                $q->where('from_id', $toId)->where('to_id', $userId);
+            })
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+         // 👉 Only fetch blocks related to these two users (not all)
+        $blockedPairs = CustomerBlock::where('status', 1)
+            ->where(function ($q) use ($userId, $toId) {
+                $q->where(function ($q2) use ($userId, $toId) {
+                    $q2->where('blocker_id', $userId)->where('blocked_id', $toId);
+                })->orWhere(function ($q2) use ($userId, $toId) {
+                    $q2->where('blocker_id', $toId)->where('blocked_id', $userId);
+                });
+            })
+            ->get(['blocker_id', 'blocked_id']);
+
+        // Filter messages (remove blocked ones)
+        $filtered = $messages->reject(function ($message) use ($blockedPairs) {
+            return $blockedPairs->contains(function ($block) use ($message) {
+                return ($block->blocker_id == $message->from_id && $block->blocked_id == $message->to_id)
+                    || ($block->blocker_id == $message->to_id && $block->blocked_id == $message->from_id);
+            });
+        });
+        
+        $formatted = $filtered->map(function ($message) {
+            [$attachment, $attachmentType] = $this->getAttachmentLink($message->attachment);
+
+            return [
+                'id' => $message->id,
+                'type' => $message->type,
+                'from_id' => $message->from_id,
+                'to_id' => $message->to_id,
+                'body' => $message->body,
+                'sent_by' => $message->sent_by,
+                'attachment' => $attachment,
+                'seen' => $message->seen ?? 0,
+                'created_at' => $message->created_at->toJSON(),
+                'updated_at' => $message->updated_at->toJSON(),
+                'attachment_type' => $attachmentType,
+            ];
+        });
+
+
+        return response()->json([
+            'total' => $formatted->count(),
+            'last_page' => 1,
+            'last_message_id' => optional($formatted->last())['id'] ?? null,
+            'messages' => $formatted,
+        ]);
+    }
+    //user to user end
 
     /**
      * fetch [user/group] messages from database
