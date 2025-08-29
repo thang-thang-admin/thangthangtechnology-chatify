@@ -17,8 +17,9 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Response;
 use Chatify\Facades\ChatifyMessenger as Chatify;
+use Google_Client;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
-
+use Illuminate\Support\Facades\Http;
 
 class MessagesController extends Controller
 {
@@ -261,6 +262,9 @@ class MessagesController extends Controller
                 'to_id' => $request['to_id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
+
+            $this->sendPushNotification(Auth::guard('sanctum')->user()->name, $request['message'], $request['id']);
+
             // }
         }
 
@@ -270,120 +274,6 @@ class MessagesController extends Controller
             'error' => $error,
             'message' => $messageData ?? [],
             'tempID' => $request['temporaryMsgId'],
-        ]);
-    }
-
-    //user to user start
-    public function sendMessage1(Request $request)
-    {
-        $request->validate([
-            'to_id' => 'required|exists:customers,id',
-        ]);
-
-        $user = Auth::guard('sanctum')->user();
-
-        $attachment = null;
-        $attachment_title = null;
-        $attachment_type = null;
-
-        if ($request->hasFile('file')) {
-            $allowed_images = Chatify::getAllowedImages();
-            $allowed_files  = Chatify::getAllowedFiles();
-            $allowed        = array_merge($allowed_images, $allowed_files);
-
-            $file = $request->file('file');
-            $extension = strtolower($file->extension());
-
-            if (!in_array($extension, $allowed)) {
-                return response()->json([
-                    'status' => '422',
-                    'error' => [
-                        'status' => 1,
-                        'message' => 'File type not allowed. Only images and audio are supported.',
-                    ]
-                ], 422);
-            }
-
-            // Determine attachment type
-            if (in_array($extension, ['mp3', 'wav', 'm4a', 'ogg', 'flac', 'aac', 'opus', 'wma', 'aiff'])) {
-                $attachment_type = 'audio';
-            } elseif (in_array($extension, ['jpg', 'jpeg', 'png', 'gif', 'webp'])) {
-                $attachment_type = 'image';
-            } else {
-                $attachment_type = 'file';
-            }
-
-            $attachment_title = $file->getClientOriginalName();
-            $uniqueName = Str::uuid() . "." . $extension;
-
-            $filePath = $file->storeAs(
-                'chat_attachments',
-                $uniqueName,
-                config('chatify.storage_disk_name')
-            );
-
-            $attachment = Storage::disk(config('chatify.storage_disk_name'))->url($filePath);
-        }
-
-        // Save message
-        $message = new ChMessage();
-        $message->type = 'user';
-        $message->from_id = $user->id;
-        $message->to_id = $request->to_id;
-        $message->body = htmlentities(trim($request->message), ENT_QUOTES, 'UTF-8');
-        $message->sent_by = 'user';
-        $message->attachment = $attachment; // Just the link
-        $message->save();
-
-        $customer = User::findOrFail($request->to_id);
-        $firebaseService = new FirebaseService();
-
-        $title = 'Send Chat Noti';
-        $body = $request->message;
-        $type = 'user';
-        // Send to all FCM tokens
-        foreach ($customer->fcmTokens ?? [] as $token) {
-            if ($customer->is_allow_noti != 'no') {                       
-                $firebaseService->sendNotification($title, $body, $token->fcm_token_key);
-            }        
-        }
-
-        // fetch message to send it with the response
-        $messageData = Chatify::parseMessage($message);
-
-        // send to user using pusher
-        Chatify::push("private-chatify." . $request['to_id'], 'messaging', [
-            'from_id' => $user->id,
-            'to_id' => $request->to_id,
-            'message' => Chatify::messageCard($messageData, true)
-        ]);
-                
-        return response()->json([
-            'status' => '200',
-            'error' => [
-                'status' => 0,
-                'message' => null,
-            ],
-            'message' => [
-                'id' => $message->id,
-                'from_id' => $message->from_id,
-                'to_id' => (string) $message->to_id,
-                'message' => $message->body,
-                'attachment' => $attachment ? [
-                    'file' => $attachment,
-                    'title' => $attachment_title,
-                    'type' => $attachment_type,
-                ] : [
-                    'file' => null,
-                    'title' => null,
-                    'type' => null,
-                ],
-                'timeAgo' => Carbon::parse($message->created_at)->diffForHumans(),
-                'created_at' => $message->created_at->toIso8601String(),
-                'sent_by' => $message->sent_by,
-                'seen' => $message->seen ?? null,
-            ],
-            'tempID' => 'temp_' . Str::random(5),
         ]);
     }
 
@@ -776,5 +666,71 @@ class MessagesController extends Controller
         return Response::json([
             'status' => $status,
         ], 200);
+    }
+
+    public function sendPushNotification($title, $message, $customerId = null, $imgUrl = null)
+    {
+        $credentialsFilePath = $_SERVER['DOCUMENT_ROOT'] . '/assets/firebase/fcm-server-key.json';
+        $client = new Google_Client();
+        $client->setAuthConfig($credentialsFilePath);
+        $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
+        $client->refreshTokenWithAssertion();
+        $token = $client->getAccessToken();
+        $access_token = $token['access_token'];
+        $project_id = env('APP_FCM_PROJECT_ID');
+
+        $url = "https://fcm.googleapis.com/v1/projects/".$project_id."/messages:send";        
+
+        $customer = User::with('fcmTokens')->find($customerId);
+
+        if (!$customer || $customer->fcmTokens->isEmpty()) {
+            return false;
+        }
+
+        $notifications = [
+            'title' => $title,
+            'body' => $message,
+        ];
+
+        if ($imgUrl) {
+            $notifications['image'] = $imgUrl;
+        }
+
+        $dataPayload = [
+            'message_id' => "1"
+        ];
+
+        foreach ($customer->fcmTokens as $token) {
+            $data = [
+                'token' => $token->fcm_token_key,
+                'notification' => $notifications,
+                'data' => $dataPayload,
+                'apns' => [
+                    'headers' => [
+                        'apns-priority' => '10',
+                    ],
+                    'payload' => [
+                        'aps' => [
+                            'sound' => 'default',
+                        ]
+                    ],
+                ],
+                'android' => [
+                    'priority' => 'high',
+                    'notification' => [
+                        'sound' => 'default',
+                    ]
+                ],
+            ];
+
+            $response = Http::withHeaders([
+                'Authorization' => "Bearer $access_token",
+                'Content-Type' => "application/json"
+            ])->post($url, [
+                'message' => $data
+            ]);
+        }
+
+        return true;
     }
 }
