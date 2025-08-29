@@ -269,6 +269,29 @@ class MessagesController extends Controller
                 $firebaseService->sendNotification($title, $body, $token->fcm_token_key);
             }        
         }
+
+        // send to database
+        $message = Chatify::newMessage([
+            'type' => $type,
+            'from_id' => Auth::guard('sanctum')->user()->id,
+            'to_id' => (string) $message->to_id,
+            'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
+            'sent_by' => 'user',
+            'attachment' => ($attachment) ? json_encode((object)[
+                'new_name' => $attachment,
+                'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
+            ]) : null,
+        ]);
+
+        // fetch message to send it with the response
+        $messageData = Chatify::parseMessage($message);
+
+        // send to user using pusher
+        Chatify::push("private-chatify." . $request['id'], 'messaging', [
+            'from_id' => Auth::guard('sanctum')->user()->id,
+            'to_id' => $request['id'],
+            'message' => Chatify::messageCard($messageData, true)
+        ]);
                 
         return response()->json([
             'status' => '200',
