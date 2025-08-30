@@ -280,33 +280,46 @@ class MessagesController extends Controller
     private function getAttachmentLink($attachment)
     {
         if (!$attachment) {
-            return [null, null];
+            return [null, null, null]; // file, title, type
         }
 
-        // If attachment is a JSON string with 'file' and 'type'
+        // If it's JSON (Chatify saves like this)
         if (Str::startsWith($attachment, '{')) {
             $data = json_decode($attachment, true);
 
-            return [
-                $data['file'] ?? null,                  // attachment URL
-                $data['type'] ?? $data['attachment_type'] ?? null,  // type like image/audio
-            ];
+            $file  = $data['new_name'] ?? null;
+            $title = $data['old_name'] ?? null;
+
+            // Guess type from extension
+            $extension = strtolower(pathinfo($file, PATHINFO_EXTENSION));
+            $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
+            $audioExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'opus'];
+
+            if (in_array($extension, $imageExtensions)) {
+                $type = 'image';
+            } elseif (in_array($extension, $audioExtensions)) {
+                $type = 'audio';
+            } else {
+                $type = 'file';
+            }
+
+            return [$file, $title, $type];
         }
 
-        // If it's already a direct link (string), try to guess type from extension
+        // If it's just a direct link string
         $extension = strtolower(pathinfo($attachment, PATHINFO_EXTENSION));
         $imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'webp'];
-        $audioExtensions = ['mp3', 'wav', 'ogg'];
+        $audioExtensions = ['mp3', 'wav', 'ogg', 'm4a', 'aac', 'opus'];
 
         if (in_array($extension, $imageExtensions)) {
             $type = 'image';
         } elseif (in_array($extension, $audioExtensions)) {
             $type = 'audio';
         } else {
-            $type = null;
+            $type = 'file';
         }
 
-        return [$attachment, $type];
+        return [$attachment, basename($attachment), $type];
     }
 
     public function getMessages($toId)
@@ -362,7 +375,7 @@ class MessagesController extends Controller
         });
         
         $formatted = $filtered->map(function ($message) {
-            [$attachment, $attachmentType] = $this->getAttachmentLink($message->attachment);
+            [$file,$title, $attachmentType] = $this->getAttachmentLink($message->attachment);
 
             return [
                 'id' => $message->id,
@@ -371,7 +384,7 @@ class MessagesController extends Controller
                 'to_id' => $message->to_id,
                 'body' => $message->body,
                 'sent_by' => $message->sent_by,
-                'attachment' => $attachment,
+                'attachment' => $file,
                 'seen' => $message->seen ?? 0,
                 'created_at' => $message->created_at->toJSON(),
                 'updated_at' => $message->updated_at->toJSON(),
