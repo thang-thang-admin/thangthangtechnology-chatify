@@ -165,6 +165,7 @@ class MessagesController extends Controller
 
         if (!$error->status) {
             $message = Chatify::newMessage([
+                'type' => $request['type'],
                 'from_id' => Auth::guard('sanctum')->user()->id,
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
@@ -181,10 +182,10 @@ class MessagesController extends Controller
             //     'message' => Chatify::messageCard($messageData, true)
             // ]);
 
-            $channel = "private-chatify." . $request['to_id']; // receiver user
+            $channel = "private-chatify." . $request['id']; // receiver user
             Chatify::push($channel, 'messaging', [
                 'from_id' => Auth::guard('sanctum')->user()->id, // admin id
-                'to_id' => $request['to_id'],
+                'to_id' => $request['id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
 
