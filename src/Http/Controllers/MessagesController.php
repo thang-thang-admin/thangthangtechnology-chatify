@@ -32,15 +32,48 @@ class MessagesController extends Controller
      * @param Request $request
      * @return JsonResponse
      */
-    public function pusherAuth(Request $request)
+    public function pusherAuthOld(Request $request)
     {
         return Chatify::pusherAuth(
-            $request->user(),
+            $request->user('sanctum'),
             Auth::guard('sanctum')->user(),
             $request['channel_name'],
             $request['socket_id']
         );
     }
+
+    public function pusherAuth(Request $request)
+    {
+        $auth = Auth::guard('sanctum')->user();           // who is authenticating (admin/customer)
+        if (!$auth) {
+            return response()->json(['message' => 'Unauthenticated'], 401);
+        }
+
+        $channel = (string) $request->input('channel_name'); // e.g. "private-chatify.4"
+        if (preg_match('/^private-chatify\.(\d+)$/', $channel, $m)) {
+            $targetId = (int) $m[1];
+
+            // Admin ကို အခြား user channel ထဲဝင်ခွင့်ပေးချင်တဲ့ကိစ္စ
+            if ($auth instanceof \App\Models\Admin && $targetId) {
+                if ($asUser = \App\Models\Customer::find($targetId)) {
+                    return Chatify::pusherAuth(
+                        $asUser,                // channel owner (user 4)
+                        $auth,                  // the authenticated admin
+                        $channel,
+                        $request['socket_id']
+                    );
+                }
+            }
+        }
+
+        // ပုံမှန် customer 自分の channel (auth, auth)
+        return Chatify::pusherAuth(
+            $auth, $auth,
+            $request['channel_name'],
+            $request['socket_id']
+        );
+    }
+
 
     /**
      * Returning the view of the app with the required data.
