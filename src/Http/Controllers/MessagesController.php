@@ -175,11 +175,19 @@ class MessagesController extends Controller
                 ]) : null,
             ]);
             $messageData = Chatify::parseMessage($message);
-            Chatify::push("private-chatify." . $request['id'], 'messaging', [
-                'from_id' => Auth::guard('sanctum')->user()->id,
-                'to_id' => $request['id'],
+            // Chatify::push("private-chatify." . $request['id'], 'messaging', [
+            //     'from_id' => Auth::guard('sanctum')->user()->id,
+            //     'to_id' => $request['id'],
+            //     'message' => Chatify::messageCard($messageData, true)
+            // ]);
+
+            $channel = "private-chatify." . $request['to_id']; // receiver user
+            Chatify::push($channel, 'messaging', [
+                'from_id' => Auth::guard('sanctum')->user()->id, // admin id
+                'to_id' => $request['to_id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
+
 
             // $this->sendPushNotification("New Message!", $request['message'], $request['id']);
             $this->sendPushNotification("Admin", $request['message'], $request['id']);

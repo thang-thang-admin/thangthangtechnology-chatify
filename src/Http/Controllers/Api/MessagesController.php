@@ -257,11 +257,19 @@ class MessagesController extends Controller
 
             // send to user using pusher
             // if (Auth::guard('sanctum')->user()->id != $request['id']) {
-            Chatify::push("private-chatify." . $request['to_id'], 'messaging', [
-                'from_id' => Auth::guard('sanctum')->user()->id,
+            // Chatify::push("private-chatify." . $request['to_id'], 'messaging', [
+            //     'from_id' => Auth::guard('sanctum')->user()->id,
+            //     'to_id' => $request['to_id'],
+            //     'message' => Chatify::messageCard($messageData, true)
+            // ]);
+
+            $channel = "private-chatify." . $request['to_id']; // receiver user
+            Chatify::push($channel, 'messaging', [
+                'from_id' => Auth::guard('sanctum')->user()->id, // admin id
                 'to_id' => $request['to_id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
+
 
             $this->sendPushNotification(Auth::guard('sanctum')->user()->name, $request['message'], $request['id']);
 
