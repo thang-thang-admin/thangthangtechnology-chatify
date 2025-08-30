@@ -165,7 +165,7 @@ class MessagesController extends Controller
 
         if (!$error->status) {
             $message = Chatify::newMessage([
-                'type' => $request['type'],
+                'type' => 'user',
                 'from_id' => Auth::guard('sanctum')->user()->id,
                 'to_id' => $request['id'],
                 'body' => htmlentities(trim($request['message']), ENT_QUOTES, 'UTF-8'),
@@ -176,22 +176,13 @@ class MessagesController extends Controller
                 ]) : null,
             ]);
             $messageData = Chatify::parseMessage($message);
-            // Chatify::push("private-chatify." . $request['id'], 'messaging', [
-            //     'from_id' => Auth::guard('sanctum')->user()->id,
-            //     'to_id' => $request['id'],
-            //     'message' => Chatify::messageCard($messageData, true)
-            // ]);
-
-            $channel = "private-chatify." . $request['id']; // receiver user
-            Chatify::push($channel, 'messaging', [
-                'from_id' => Auth::guard('sanctum')->user()->id, // admin id
+            Chatify::push("private-chatify." . $request['id'], 'messaging', [
+                'from_id' => Auth::guard('sanctum')->user()->id,
                 'to_id' => $request['id'],
                 'message' => Chatify::messageCard($messageData, true)
             ]);
 
-
-            // $this->sendPushNotification("New Message!", $request['message'], $request['id']);
-            $this->sendPushNotification("Admin", $request['message'], $request['id']);
+            $this->sendPushNotification("New Message!", $request['message'], $request['id']);
         }
 
         // send the response
