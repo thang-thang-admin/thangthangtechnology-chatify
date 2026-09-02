@@ -171,6 +171,9 @@ class MessagesController extends Controller
                     'new_name' => $attachment,
                     'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
                 ]) : null,
+                'is_reply' => (bool) $request['is_reply'],
+                'previous_message_id' => $request['previous_message_id'] ?? null,
+                'previous_message' => $request['previous_message'] ?? null,
             ]);
 
             // fetch message to send it with the response
@@ -250,6 +253,9 @@ class MessagesController extends Controller
                     'new_name' => $attachment,
                     'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
                 ]) : null,
+                'is_reply' => (bool) $request['is_reply'],
+                'previous_message_id' => $request['previous_message_id'] ?? null,
+                'previous_message' => $request['previous_message'] ?? null,
             ]);
 
             // fetch message to send it with the response
