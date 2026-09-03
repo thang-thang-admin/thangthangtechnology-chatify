@@ -171,6 +171,9 @@ class ChatifyMessenger
             'sent_by' => $msg->sent_by,
             // 'isSender' => ($msg->from_id == Auth::guard('sanctum')->user()->id),
             'seen' => $msg->seen,
+            'is_reply' => (bool) $msg->is_reply,
+            'previous_message_id' => $msg->previous_message_id,
+            'previous_message' => $msg->previous_message,
         ];
     }
 
@@ -218,6 +221,9 @@ class ChatifyMessenger
         $message->body = $data['body'];
         $message->sent_by = $data['sent_by'];
         $message->attachment = $data['attachment'];
+        $message->is_reply = $data['is_reply'] ?? false;
+        $message->previous_message_id = $data['previous_message_id'] ?? null;
+        $message->previous_message = $data['previous_message'] ?? null;
         $message->save();
         return $message;
     }
