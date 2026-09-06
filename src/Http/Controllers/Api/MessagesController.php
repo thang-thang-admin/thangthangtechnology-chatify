@@ -14,6 +14,7 @@ use Carbon\Carbon;
 use Illuminate\Routing\Controller;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Response;
 use Chatify\Facades\ChatifyMessenger as Chatify;
@@ -427,6 +428,9 @@ class MessagesController extends Controller
                 'sent_by' => $message->sent_by,
                 'attachment' => $attachment,
                 'seen' => $message->seen ?? 0,
+                'previous_message_id' => $message->previous_message_id,
+                'previous_message' => $message->previous_message,
+                'is_reply' => (bool) $message->is_reply,
                 'created_at' => $message->created_at->toJSON(),
                 'updated_at' => $message->updated_at->toJSON(),
                 'attachment_type' => $attachmentType,
@@ -724,16 +728,25 @@ class MessagesController extends Controller
 
     public function sendPushNotification($title, $message, $customerId = null, $imgUrl = null)
     {
-        $credentialsFilePath = $_SERVER['DOCUMENT_ROOT'] . '/assets/firebase/fcm-server-key.json';
-        $client = new Google_Client();
+        try {
+            $credentialsFilePath = $_SERVER['DOCUMENT_ROOT'] . '/assets/firebase/fcm-server-key.json';
+            if (!file_exists($credentialsFilePath)) {
+                Log::warning('FCM credentials file not found: ' . $credentialsFilePath);
+                return false;
+            }
+            $client = new Google_Client();
         $client->setAuthConfig($credentialsFilePath);
         $client->addScope('https://www.googleapis.com/auth/firebase.messaging');
         $client->refreshTokenWithAssertion();
         $token = $client->getAccessToken();
         $access_token = $token['access_token'];
         $project_id = env('APP_FCM_PROJECT_ID');
+            if (!$project_id) {
+                Log::warning('FCM APP_FCM_PROJECT_ID is not set; skipping push.');
+                return false;
+            }
 
-        $url = "https://fcm.googleapis.com/v1/projects/".$project_id."/messages:send";        
+            $url = "https://fcm.googleapis.com/v1/projects/".$project_id."/messages:send";
 
         $customer = User::with('fcmTokens')->find($customerId);
 
@@ -778,11 +791,15 @@ class MessagesController extends Controller
             ];
 
             $response = Http::withHeaders([
-                'Authorization' => "Bearer $access_token",
-                'Content-Type' => "application/json"
-            ])->post($url, [
-                'message' => $data
-            ]);
+                    'Authorization' => "Bearer $access_token",
+                    'Content-Type' => "application/json"
+                ])->post($url, [
+                    'message' => $data
+                ]);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('sendPushNotification failed: ' . $e->getMessage());
+            return false;
         }
 
         return true;

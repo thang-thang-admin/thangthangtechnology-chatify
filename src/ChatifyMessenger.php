@@ -221,9 +221,16 @@ class ChatifyMessenger
         $message->body = $data['body'];
         $message->sent_by = $data['sent_by'];
         $message->attachment = $data['attachment'];
-        $message->is_reply = $data['is_reply'] ?? false;
         $message->previous_message_id = $data['previous_message_id'] ?? null;
+        // Reply system flow: if only the ID is provided (the common case
+        // from mobile/admin clients), resolve the quoted body server-side.
         $message->previous_message = $data['previous_message'] ?? null;
+        if (($message->previous_message === null || $message->previous_message === '')
+            && !empty($message->previous_message_id)) {
+            $original = Message::find($message->previous_message_id);
+            $message->previous_message = $original ? $original->body : null;
+        }
+        $message->is_reply = !empty($message->previous_message_id);
         $message->save();
         return $message;
     }
