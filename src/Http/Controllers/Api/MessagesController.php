@@ -726,7 +726,7 @@ class MessagesController extends Controller
         ], 200);
     }
 
-    public function sendPushNotification($title, $message, $customerId = null, $imgUrl = null)
+    public function sendPushNotification(string $title, string $message, ?int $customerId = null, ?string $imgUrl = null)
     {
         try {
             $credentialsFilePath = $_SERVER['DOCUMENT_ROOT'] . '/assets/firebase/fcm-server-key.json';

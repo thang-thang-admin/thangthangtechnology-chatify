@@ -150,7 +150,7 @@ class ChatifyMessenger
             $attachment = $attachmentOBJ->new_name;
             $attachment_title = htmlentities(trim($attachmentOBJ->old_name), ENT_QUOTES, 'UTF-8');
             $ext = pathinfo($attachment, PATHINFO_EXTENSION);
-            if ($ext == 'wav' || $ext == 'mp3') {
+            if (in_array(strtolower($ext), ['wav', 'mp3', 'webm', 'ogg', 'm4a', 'aac', 'opus'])) {
                 $attachment_type = 'audio';
             } else {
                 $attachment_type = in_array($ext, $this->getAllowedImages()) ? 'image' : 'file';
@@ -169,11 +169,8 @@ class ChatifyMessenger
             'timeAgo' => $msg->created_at->diffForHumans(),
             'created_at' => $msg->created_at->toIso8601String(),
             'sent_by' => $msg->sent_by,
-            // 'isSender' => ($msg->from_id == Auth::guard('sanctum')->user()->id),
+            'isSender' => ($msg->from_id == $this->getAuthId()),
             'seen' => $msg->seen,
-            'is_reply' => (bool) $msg->is_reply,
-            'previous_message_id' => $msg->previous_message_id,
-            'previous_message' => $msg->previous_message,
         ];
     }
 
@@ -201,10 +198,16 @@ class ChatifyMessenger
      * @param int $user_id
      * @return Message|\Illuminate\Database\Eloquent\Builder
      */
-    public function fetchMessagesQuery($user_id, $auth_id = 1)
+    public function fetchMessagesQuery($user_id, $auth_id = null)
     {
-        return Message::where('from_id', $auth_id)->where('to_id', $user_id)
-                    ->orWhere('from_id', $user_id)->where('to_id', $auth_id);
+        $auth_id = $auth_id ?: $this->getAuthId();
+
+        return Message::where(function ($q) use ($auth_id, $user_id) {
+                    $q->where('from_id', $auth_id)->where('to_id', $user_id);
+                })
+                ->orWhere(function ($q) use ($auth_id, $user_id) {
+                    $q->where('from_id', $user_id)->where('to_id', $auth_id);
+                });
     }
 
     /**
@@ -221,16 +224,6 @@ class ChatifyMessenger
         $message->body = $data['body'];
         $message->sent_by = $data['sent_by'];
         $message->attachment = $data['attachment'];
-        $message->previous_message_id = $data['previous_message_id'] ?? null;
-        // Reply system flow: if only the ID is provided (the common case
-        // from mobile/admin clients), resolve the quoted body server-side.
-        $message->previous_message = $data['previous_message'] ?? null;
-        if (($message->previous_message === null || $message->previous_message === '')
-            && !empty($message->previous_message_id)) {
-            $original = Message::find($message->previous_message_id);
-            $message->previous_message = $original ? $original->body : null;
-        }
-        $message->is_reply = !empty($message->previous_message_id);
         $message->save();
         return $message;
     }
@@ -244,8 +237,14 @@ class ChatifyMessenger
      */
     public function makeSeen($user_id)
     {
+        $authId = $this->getAuthId();
+
+        if (!$authId) {
+            return 0;
+        }
+
         Message::Where('from_id', $user_id)
-                ->where('to_id', Auth::guard('sanctum')->user()->id)
+                ->where('to_id', $authId)
                 ->where('seen', 0)
                 ->update(['seen' => 1]);
         return 1;
@@ -270,7 +269,13 @@ class ChatifyMessenger
      */
     public function countUnseenMessages($user_id)
     {
-        return Message::where('from_id', $user_id)->where('to_id', Auth::guard('sanctum')->user()->id)->where('seen', 0)->count();
+        $authId = $this->getAuthId();
+
+        if (!$authId) {
+            return 0;
+        }
+
+        return Message::where('from_id', $user_id)->where('to_id', $authId)->where('seen', 0)->count();
     }
 
     /**
@@ -286,12 +291,14 @@ class ChatifyMessenger
         try {
             // get last message
             $lastMessage = $this->getLastMessageQuery($user->id);
+
             // Get Unseen messages counter
             $unseenCounter = $this->countUnseenMessages($user->id);
             if ($lastMessage) {
-                $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
                 $lastMessage->timeAgo = $lastMessage->created_at->diffForHumans();
+                $lastMessage->created_at = $lastMessage->created_at->toIso8601String();
             }
+
             return view('Chatify::layouts.listItem', [
                 'get' => 'users',
                 'user' => $this->getUserWithAvatar($user),
@@ -311,13 +318,18 @@ class ChatifyMessenger
      */
     public function getUserWithAvatar($user)
     {
-        if ($user->image == 'avatar.png' && config('chatify.gravatar.enabled')) {
+        // Resolve avatar from the available attributes (image / avatar / profile)
+        $image = $user->image ?? $user->avatar ?? $user->profile ?? null;
+
+        if ($image == 'avatar.png' && config('chatify.gravatar.enabled')) {
             $imageSize = config('chatify.gravatar.image_size');
             $imageset = config('chatify.gravatar.imageset');
-            $user->image = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($user->email))) . '?s=' . $imageSize . '&d=' . $imageset;
-        } else {
-            $user->image = self::getUserAvatarUrl($user->profile);
+            $image = 'https://www.gravatar.com/avatar/' . md5(strtolower(trim($user->email ?? ''))) . '?s=' . $imageSize . '&d=' . $imageset;
+        } elseif (empty($image)) {
+            $image = self::getUserAvatarUrl(null);
         }
+
+        $user->image = $image;
         return $user;
     }
 
@@ -329,7 +341,13 @@ class ChatifyMessenger
      */
     public function inFavorite($user_id)
     {
-        return Favorite::where('user_id', Auth::guard('sanctum')->user()->id)
+        $authId = $this->getAuthId();
+
+        if (!$authId) {
+            return false;
+        }
+
+        return Favorite::where('user_id', $authId)
                         ->where('favorite_id', $user_id)->count() > 0
                         ? true : false;
     }
@@ -343,16 +361,22 @@ class ChatifyMessenger
      */
     public function makeInFavorite($user_id, $action)
     {
+        $authId = $this->getAuthId();
+
+        if (!$authId) {
+            return false;
+        }
+
         if ($action > 0) {
             // Star
             $star = new Favorite();
-            $star->user_id = Auth::guard('sanctum')->user()->id;
+            $star->user_id = $authId;
             $star->favorite_id = $user_id;
             $star->save();
             return $star ? true : false;
         } else {
             // UnStar
-            $star = Favorite::where('user_id', Auth::guard('sanctum')->user()->id)->where('favorite_id', $user_id)->delete();
+            $star = Favorite::where('user_id', $authId)->where('favorite_id', $user_id)->delete();
             return $star ? true : false;
         }
     }
@@ -432,6 +456,19 @@ class ChatifyMessenger
     }
 
     /**
+     * Safely resolve the authenticated user id from the available guards
+     * (sanctum guard first, then the default guard).
+     *
+     * @return int|null
+     */
+    public function getAuthId()
+    {
+        $user = Auth::guard('sanctum')->user() ?? Auth::user();
+
+        return $user?->id;
+    }
+
+    /**
      * Return a storage instance with disk name specified in the config.
      *
      */
@@ -464,6 +501,12 @@ class ChatifyMessenger
      */
     public function getAttachmentUrl($attachment_name)
     {
+        // If the attachment is already a full URL (e.g. stored on S3),
+        // return it as-is to avoid double-encoding the URL.
+        if (filter_var($attachment_name, FILTER_VALIDATE_URL)) {
+            return $attachment_name;
+        }
+
         return asset('image/public/'.config('chatify.attachments.folder') . '/' . $attachment_name);
     }
 }

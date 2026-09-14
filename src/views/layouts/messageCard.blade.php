@@ -7,8 +7,14 @@ $timeAndSeen =
     " <span class='time'>$timeAgo</span>
     </span>";
 $audioId = substr(md5(uniqid(mt_rand(), true)), 0, 8);
-$messenger_color = App\Models\User::first()->messenger_color;
-$senderColor = $messenger_color ? $messenger_color : Chatify::getFallbackColor();
+$messenger_color = optional(App\Models\User::first())->messenger_color;
+$senderColor = $messenger_color ?: Chatify::getFallbackColor();
+$attachmentUrl = null;
+if (!empty(@$attachment->file)) {
+    $attachmentUrl = filter_var($attachment->file, FILTER_VALIDATE_URL)
+        ? $attachment->file
+        : route(config('chatify.attachments.download_route_name'), ['fileName' => $attachment->file]);
+}
 ?>
 
 <div class="message-card @if ($sent_by == 'admin') mc-sender @endif" data-id="{{ $id }}">
@@ -28,7 +34,7 @@ $senderColor = $messenger_color ? $messenger_color : Chatify::getFallbackColor()
                 {!! $timeAndSeen !!}
                 {{-- If attachment is a file --}}
                 @if (@$attachment->type == 'file')
-                    <a href="{{ route(config('chatify.attachments.download_route_name'), ['fileName' => $attachment->file]) }}"
+                    <a href="{{ $attachmentUrl }}"
                         class="file-download">
                         <span class="fas fa-file"></span> {{ $attachment->title }}</a>
                 @endif
@@ -46,15 +52,15 @@ $senderColor = $messenger_color ? $messenger_color : Chatify::getFallbackColor()
             </div>
         @endif
         @if (@$attachment->type == 'audio')
-            <div class="message">
-                <div style="margin-bottom:5px">
-                    {!! $timeAndSeen !!}
+            <div class="message voice-message-bubble">
+                <div class="voice-message-player" data-audio-url="{{ $attachmentUrl }}">
+                    <button class="voice-message-play" type="button" onclick="window.playChatifyVoice(this)">
+                        <span class="fas fa-play"></span>
+                    </button>
+                    <audio class="voice-message-audio" src="{{ $attachmentUrl }}" preload="metadata"></audio>
                 </div>
-                <div class="audio-container">
-                    <i class="fas fa-play" style="color: {{ $sent_by == 'admin' ? 'white' : $senderColor }}"
-                        id="playBtn{{ $audioId }}" onclick="playAudio(this)" data-audio="{{ $audioId }}"
-                        style="color: white;margin-right:5px;"></i>
-                    <div id="waveform{{ $audioId }}" style="width: 100%; height: 40px;"></div>
+                <div class="voice-message-meta">
+                    {!! $timeAndSeen !!}
                 </div>
             </div>
         @endif
@@ -62,52 +68,24 @@ $senderColor = $messenger_color ? $messenger_color : Chatify::getFallbackColor()
 </div>
 @if ($attachment->type == 'audio')
     <script>
-        if (!audioVar) {
-            var audioVar = {}
-            audioVar["{{ $audioId }}"] = WaveSurfer.create({
-                container: '#waveform{{ $audioId }}',
-                waveColor: "{{ $sent_by == 'admin' ? '#ffffff' : $senderColor }}",
-                progressColor: '#4da8f9',
-                height: 40,
-                cursorWidth: 0,
-                barWidth: 4,
-                barGap: 3,
-                barRadius: 5,
-                url: "{{ Chatify::getAttachmentUrl($attachment->file) }}"
-            });
-        } else {
-            audioVar["{{ $audioId }}"] = WaveSurfer.create({
-                container: '#waveform{{ $audioId }}',
-                waveColor: "{{ $sent_by == 'admin' ? '#ffffff' : $senderColor }}",
-                progressColor: '#4da8f9',
-                height: 40,
-                cursorWidth: 0,
-                barWidth: 4,
-                barGap: 3,
-                barRadius: 5,
-                url: "{{ Chatify::getAttachmentUrl($attachment->file) }}"
-            });
-        }
+        window.playChatifyVoice = window.playChatifyVoice || function (button) {
+            const player = button.closest('.voice-message-player');
+            const audio = player && player.querySelector('.voice-message-audio');
+            const icon = button.querySelector('span');
+            if (!audio) return;
 
-        function playAudio(ele) {
-            if (ele.classList.contains('fa-play')) {
-                ele.classList.remove('fa-play')
-                ele.classList.add('fa-pause')
-
-                audioVar[ele.dataset.audio].play();
-
-                audioVar[ele.dataset.audio].on('finish', () => {
-                    let btn = document.getElementById(`playBtn${ele.dataset.audio}`)
-
-                    btn.classList.remove('fa-pause');
-                    btn.classList.add('fa-play');
-                })
+            if (audio.paused) {
+                audio.play().then(() => {
+                    if (icon) icon.className = 'fas fa-pause';
+                }).catch((error) => console.error('Chatify audio playback failed:', error));
             } else {
-                ele.classList.add('fa-play')
-                ele.classList.remove('fa-pause')
-
-                audioVar[ele.dataset.audio].pause()
+                audio.pause();
+                if (icon) icon.className = 'fas fa-play';
             }
-        }
+
+            audio.onended = () => {
+                if (icon) icon.className = 'fas fa-play';
+            };
+        };
     </script>
 @endif

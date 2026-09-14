@@ -148,7 +148,7 @@ class InstallCommand extends Command
      * @param string $model
      * @return void
      */
-    private function modifyModelsPath($targetFilePath, $model = null)
+    private function modifyModelsPath(string $targetFilePath, ?string $model = null)
     {
         $path = realpath(__DIR__ . $targetFilePath);
         $contents = File::get($path);

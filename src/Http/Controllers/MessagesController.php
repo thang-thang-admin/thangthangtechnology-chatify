@@ -48,7 +48,7 @@ class MessagesController extends Controller
      * @param int $id
      * @return \Illuminate\Contracts\Foundation\Application|\Illuminate\Contracts\View\Factory|\Illuminate\Contracts\View\View
      */
-    public function index($id = null)
+    public function index(?int $id = null)
     {
         $messenger_color = Auth::guard('sanctum')->user()->messenger_color;
         return view('Chatify::pages.app', [
@@ -584,7 +584,7 @@ class MessagesController extends Controller
     //     // }
     // }
 
-    public function sendPushNotification($title, $message, $customerId = null, $imgUrl = null)
+    public function sendPushNotification(string $title, string $message, ?int $customerId = null, ?string $imgUrl = null)
     {
         $credentialsFilePath = $_SERVER['DOCUMENT_ROOT'] . '/assets/firebase/fcm-server-key.json';
         $client = new Google_Client();
