@@ -11,9 +11,10 @@ $messenger_color = optional(App\Models\User::first())->messenger_color;
 $senderColor = $messenger_color ?: Chatify::getFallbackColor();
 $attachmentUrl = null;
 if (!empty(@$attachment->file)) {
-    $attachmentUrl = filter_var($attachment->file, FILTER_VALIDATE_URL)
-        ? $attachment->file
-        : route(config('chatify.attachments.download_route_name'), ['fileName' => $attachment->file]);
+    $attachmentFile = trim((string) $attachment->file);
+    $attachmentUrl = preg_match('/^https?:\/\//i', $attachmentFile)
+        ? $attachmentFile
+        : route(config('chatify.attachments.download_route_name'), ['fileName' => $attachmentFile]);
 }
 ?>
 
@@ -54,10 +55,7 @@ if (!empty(@$attachment->file)) {
         @if (@$attachment->type == 'audio')
             <div class="message voice-message-bubble">
                 <div class="voice-message-player" data-audio-url="{{ $attachmentUrl }}">
-                    <button class="voice-message-play" type="button" onclick="window.playChatifyVoice(this)">
-                        <span class="fas fa-play"></span>
-                    </button>
-                    <audio class="voice-message-audio" src="{{ $attachmentUrl }}" preload="metadata"></audio>
+                    <audio class="voice-message-audio" src="{{ $attachmentUrl }}" preload="metadata" controls></audio>
                 </div>
                 <div class="voice-message-meta">
                     {!! $timeAndSeen !!}

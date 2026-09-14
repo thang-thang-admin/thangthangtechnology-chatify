@@ -172,6 +172,7 @@ class MessagesController extends Controller
                 'attachment' => ($attachment) ? json_encode((object)[
                     'new_name' => $attachment,
                     'old_name' => htmlentities(trim($attachment_title), ENT_QUOTES, 'UTF-8'),
+                    'duration' => $request->type == 'audio' ? (int) $request->input('duration', 0) : null,
                 ]) : null,
             ]);
             $messageData = Chatify::parseMessage($message);
